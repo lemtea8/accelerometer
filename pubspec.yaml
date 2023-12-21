@@ -33,6 +33,7 @@ dependencies:
   
   sensors_plus: ^4.0.2
   shared_preferences: ^2.2.2
+  # syncfusion_flutter_charts: ^24.1.41
   # fl_chart: ^0.65.0
   flutter_riverpod: ^2.4.9
   wakelock_plus: ^1.1.4
@@ -80,9 +81,9 @@ flutter:
   # list giving the asset and other descriptors for the font. For
   # example:
   fonts:
-    - family: anonymous_pro
+    - family: robot-mono
       fonts:
-        - asset: assets/fonts/AnonymousPro-Regular.ttf
+        - asset: assets/fonts/RobotoMono-Regular.ttf
   #       - asset: fonts/Schyler-Italic.ttf
   #         style: italic
   #   - family: Trajan Pro

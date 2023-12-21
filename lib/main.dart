@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:accelerometer/line_chart.dart';
 import 'package:accelerometer/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -40,6 +42,7 @@ class App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'Accelerometer',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.lime,
         appBarTheme: AppBarTheme(color: Colors.lime.shade100),
@@ -76,7 +79,7 @@ class App extends ConsumerWidget {
       themeMode: ref.watch(brightnessProvider) == Brightness.light
           ? ThemeMode.light
           : ThemeMode.dark,
-      home: const StressTest(),
+      home: const Home(),
     );
   }
 }
@@ -173,7 +176,9 @@ class _HomeState extends ConsumerState<Home> {
             Expanded(
               flex: 9,
               child: GraphCard(
-                child: haveSensor ? const AccChart() : const SineChart(),
+                child: haveSensor
+                    ? const AccChart()
+                    : const SineChart(count: count),
               ),
             ),
             const SizedBox(height: 84),
@@ -272,7 +277,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
             final text = 'maximum: $accStr m/s²';
             return Text(
               text,
-              style: const TextStyle(fontFamily: 'anonymous_pro'),
+              style: const TextStyle(fontFamily: 'robot-mono'),
             );
           },
         ),
@@ -283,7 +288,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
             final text = 'current: $curr m/s²';
             return Text(
               text,
-              style: const TextStyle(fontFamily: 'anonymous_pro'),
+              style: const TextStyle(fontFamily: 'robot-mono'),
             );
           },
         ),
@@ -361,7 +366,8 @@ class _AccChartState extends State<AccChart> {
 }
 
 class SineChart extends StatefulWidget {
-  const SineChart({super.key});
+  final int count;
+  const SineChart({super.key, required this.count});
 
   @override
   State<SineChart> createState() => _SineChartState();
@@ -372,8 +378,11 @@ class _SineChartState extends State<SineChart>
     with SingleTickerProviderStateMixin {
   final _step = 0.05;
 
-  final _line1 = LineChartData(limit: count);
-  final _line2 = LineChartData(limit: count);
+  final rand = Random();
+  late final _line1 = LineChartData(limit: widget.count);
+  late final _line2 = LineChartData(limit: widget.count);
+  late final color1 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
+  late final color2 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
 
   late final AnimationController _controller;
 
@@ -388,11 +397,17 @@ class _SineChartState extends State<SineChart>
     _controller.addListener(() {
       final value = sin(x);
       _line1.addData(x, value);
-      final value2 = cos(x);
+      final value2 = sin(x + pi);
       _line2.addData(x, value2);
       x += _step;
     });
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -405,12 +420,14 @@ class _SineChartState extends State<SineChart>
         }
         return LineChart(
           lines: [
-            _line1.asLine(color: Colors.red, strokeWidth: 3),
-            _line2.asLine(color: Colors.blue, strokeWidth: 3),
+            _line1.asLine(color: color1, strokeWidth: 3),
+            _line2.asLine(color: color2, strokeWidth: 3),
           ],
           showLabel: false,
           minX: _line1.first.$1,
-          maxX: _line1.first.$1 + count * _step,
+          maxX: _line1.first.$1 + widget.count * _step,
+          minY: -1,
+          maxY: 1,
         );
       },
     );
@@ -480,29 +497,103 @@ class _SingleStreamChartState extends State<SingleStreamChart> {
   }
 }
 
-class StressTest extends StatelessWidget {
+class StressTest extends StatefulWidget {
   const StressTest({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: widgetsBuilder(const SineChart(), 10),
-    );
+  State<StressTest> createState() => _StressTestState();
+}
+
+class _StressTestState extends State<StressTest> {
+  int count = 1;
+  final frameTime = ValueNotifier(1);
+
+  @override
+  void initState() {
+    SchedulerBinding.instance.addTimingsCallback(callback);
+    super.initState();
   }
 
-  List<Widget> widgetsBuilder(Widget child, int count) {
-    List<Widget> list = [];
-    for (int i = 0; i < count; i++) {
-      list.add(
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: child,
+  @override
+  void dispose() {
+    SchedulerBinding.instance.removeTimingsCallback(callback);
+    super.dispose();
+  }
+
+  void callback(List<FrameTiming> timings) {
+    final time1 = timings.last.rasterDuration.inMicroseconds;
+    final time2 = timings.last.buildDuration.inMicroseconds;
+    frameTime.value = max(time1, time2);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chart = Expanded(
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: ColoredBox(
+          color: Theme.of(context).focusColor,
+          child: const SineChart(count: 250),
+        ),
+      ),
+    );
+    return Scaffold(
+      appBar: AppBar(
+        actions: [
+          ValueListenableBuilder(
+            valueListenable: frameTime,
+            builder: (context, value, _) {
+              final fps = const Duration(seconds: 1).inMicroseconds / value;
+              return Text(
+                'fps: ${fps.toStringAsFixed(1).padLeft(5, ' ')}',
+                style: const TextStyle(fontFamily: 'robot-mono'),
+              );
+            },
+          ),
+          const SizedBox(width: 12),
+        ],
+      ),
+      body: Column(
+        children: List.filled(
+          count * 2,
+          Expanded(
+            child: Row(
+              children: List.filled(count, chart),
+            ),
           ),
         ),
-      );
-    }
-    return list;
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Visibility(
+            visible: count <= 15,
+            child: FloatingActionButton(
+              onPressed: () {
+                setState(() {
+                  count++;
+                });
+              },
+              child: const Icon(Icons.keyboard_double_arrow_up),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Visibility(
+            visible: count != 1,
+            maintainAnimation: true,
+            maintainSize: true,
+            maintainState: true,
+            child: FloatingActionButton(
+              onPressed: () {
+                setState(() {
+                  count--;
+                });
+              },
+              child: const Icon(Icons.keyboard_double_arrow_down),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -165,7 +165,9 @@ class _HomeState extends ConsumerState<Home> {
             Expanded(
               flex: 10,
               child: GraphCard(
-                child: haveSensor ? const UserAccChart() : const RandomChart(),
+                child: haveSensor
+                    ? const UserAccChart()
+                    : const SineChart(count: count),
               ),
             ),
             const SizedBox(height: 26),
@@ -373,32 +375,40 @@ class SineChart extends StatefulWidget {
   State<SineChart> createState() => _SineChartState();
 }
 
-/// rebuild every frame
+final rand = Random();
+
 class _SineChartState extends State<SineChart>
     with SingleTickerProviderStateMixin {
-  final _step = 0.05;
+  final _step = 0.07;
 
-  final rand = Random();
   late final _line1 = LineChartData(limit: widget.count);
-  late final _line2 = LineChartData(limit: widget.count);
+  // late final _line2 = LineChartData(limit: widget.count);
   late final color1 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
-  late final color2 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
+  // late final color2 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
+  late final mul1 = rand.nextInt(9) + 7; // 7-15
+  late final mul2 = rand.nextInt(6) + 16; // 16-21
+  late final div1 = rand.nextInt(6) + 4; // 4-9
+  late final div2 = rand.nextInt(5) + 10; // 10-14
 
   late final AnimationController _controller;
 
-  double x = 0.0;
+  double x = rand.nextDouble() + rand.nextInt(5);
 
   @override
   void initState() {
+    // rebuild every frame
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat();
     _controller.addListener(() {
-      final value = sin(x);
+      final value = sin(mul1 * x / div1) +
+          cos(mul2 * x / div2) -
+          sin(mul2 * x / div1) -
+          cos(mul1 * x / div2);
       _line1.addData(x, value);
-      final value2 = sin(x + pi);
-      _line2.addData(x, value2);
+      // final value2 = cos(mul1 * x / div1) - sin(mul2 * x / div2);
+      // _line2.addData(x, value2);
       x += _step;
     });
     super.initState();
@@ -421,13 +431,13 @@ class _SineChartState extends State<SineChart>
         return LineChart(
           lines: [
             _line1.asLine(color: color1, strokeWidth: 3),
-            _line2.asLine(color: color2, strokeWidth: 3),
+            // _line2.asLine(color: color2, strokeWidth: 3),
           ],
           showLabel: false,
           minX: _line1.first.$1,
           maxX: _line1.first.$1 + widget.count * _step,
-          minY: -1,
-          maxY: 1,
+          minY: -3,
+          maxY: 3,
         );
       },
     );
@@ -506,7 +516,7 @@ class StressTest extends StatefulWidget {
 
 class _StressTestState extends State<StressTest> {
   int count = 1;
-  final frameTime = ValueNotifier(1);
+  final frameTime = ValueNotifier(const Duration(seconds: 1).inMicroseconds);
 
   @override
   void initState() {

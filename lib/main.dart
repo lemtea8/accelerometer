@@ -4,7 +4,6 @@ import 'dart:math';
 
 import 'package:accelerometer/line_chart.dart';
 import 'package:accelerometer/providers.dart';
-import 'package:accelerometer/vector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -241,7 +240,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
       if (acc > _maxValue.value) {
         _maxValue.value = acc;
       }
-      _accLine.addData(Vector2(x, acc));
+      _accLine.addData(x, acc);
       x += _step;
       _graphNotifier.value = x;
     });
@@ -302,8 +301,8 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
                     strokeWidth: 1,
                   ),
                 ],
-                minX: _accLine.first.x,
-                maxX: _accLine.first.x + count * _step,
+                minX: _accLine.first.$1,
+                maxX: _accLine.first.$1 + count * _step,
                 minY: 0,
                 labelCount: 5,
               ),
@@ -343,7 +342,7 @@ class _AccChartState extends State<AccChart> {
         final v = snapshot.data!;
         final sum = v.x * v.x + v.y * v.y + v.z * v.z;
         final acc = sqrt(sum);
-        _accLine.addData(Vector2(x, acc));
+        _accLine.addData(x, acc);
         x += _step;
         return LineChart(
           lines: [
@@ -352,8 +351,8 @@ class _AccChartState extends State<AccChart> {
               strokeWidth: 1,
             ),
           ],
-          minX: _accLine.first.x,
-          maxX: _accLine.first.x + count * _step,
+          minX: _accLine.first.$1,
+          maxX: _accLine.first.$1 + count * _step,
           labelCount: 5,
         );
       },
@@ -368,39 +367,52 @@ class SineChart extends StatefulWidget {
   State<SineChart> createState() => _SineChartState();
 }
 
-class _SineChartState extends State<SineChart> {
+/// rebuild every frame
+class _SineChartState extends State<SineChart>
+    with SingleTickerProviderStateMixin {
   final _step = 0.05;
 
   final _line1 = LineChartData(limit: count);
   final _line2 = LineChartData(limit: count);
+
+  late final AnimationController _controller;
+
   double x = 0.0;
 
   @override
   void initState() {
-    Timer.periodic(const Duration(milliseconds: 20), (timer) {
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat();
+    _controller.addListener(() {
       final value = sin(x);
-      _line1.addData(Vector2(x, value));
+      _line1.addData(x, value);
       final value2 = cos(x);
-      _line2.addData(Vector2(x, value2));
+      _line2.addData(x, value2);
       x += _step;
-      setState(() {});
     });
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_line1.isEmpty) {
-      return const SizedBox();
-    }
-    return LineChart(
-      lines: [
-        _line1.asLine(color: Colors.red, strokeWidth: 3),
-        _line2.asLine(color: Colors.blue, strokeWidth: 3),
-      ],
-      showLabel: false,
-      minX: _line1.first.x,
-      maxX: _line1.first.x + count * _step,
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        if (_line1.isEmpty) {
+          return const SizedBox();
+        }
+        return LineChart(
+          lines: [
+            _line1.asLine(color: Colors.red, strokeWidth: 3),
+            _line2.asLine(color: Colors.blue, strokeWidth: 3),
+          ],
+          showLabel: false,
+          minX: _line1.first.$1,
+          maxX: _line1.first.$1 + count * _step,
+        );
+      },
     );
   }
 }
@@ -451,7 +463,7 @@ class _SingleStreamChartState extends State<SingleStreamChart> {
           return const SizedBox();
         }
         final v = snapshot.data!;
-        _line.addData(Vector2(x, v));
+        _line.addData(x, v);
         x += 1.0;
         return LineChart(
           lines: [
@@ -460,8 +472,8 @@ class _SingleStreamChartState extends State<SingleStreamChart> {
               strokeWidth: 1,
             ),
           ],
-          minX: _line.first.x,
-          maxX: _line.first.x + count * _step,
+          minX: _line.first.$1,
+          maxX: _line.first.$1 + count * _step,
         );
       },
     );
@@ -473,11 +485,24 @@ class StressTest extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      itemCount: 100,
-      gridDelegate:
-          const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10),
-      itemBuilder: (context, index) => const SineChart(),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: widgetsBuilder(const SineChart(), 10),
     );
+  }
+
+  List<Widget> widgetsBuilder(Widget child, int count) {
+    List<Widget> list = [];
+    for (int i = 0; i < count; i++) {
+      list.add(
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: child,
+          ),
+        ),
+      );
+    }
+    return list;
   }
 }

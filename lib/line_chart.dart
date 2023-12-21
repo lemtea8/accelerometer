@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:accelerometer/vector.dart';
+import 'package:accelerometer/buffered_list.dart';
 import 'package:flutter/material.dart';
 
 class LineChart extends StatefulWidget {
@@ -39,8 +39,8 @@ class _LineChartState extends State<LineChart> {
 
   @override
   Widget build(BuildContext context) {
-    final minX = widget.minX ?? widget.lines[0].data.first.x;
-    final maxX = widget.maxX ?? widget.lines[0].data.last.x;
+    final minX = widget.minX ?? widget.lines[0].data._xData.first;
+    final maxX = widget.maxX ?? widget.lines[0].data._xData.last;
     final minY = widget.minY ?? widget.lines[0].data._minY;
     final maxY = widget.maxY ?? widget.lines[0].data._maxY;
     final labelSize =
@@ -101,53 +101,49 @@ class Line {
 }
 
 class LineChartData {
-  final List<Vector2> _points = [];
+  // data-oriented design
+  final BufferedFixedLengthList _xData;
+  final BufferedFixedLengthList _yData;
   final int limit;
 
   LineChartData({
     required this.limit,
-  });
+  })  : _xData = BufferedFixedLengthList(limit),
+        _yData = BufferedFixedLengthList(limit);
 
   // min y value in array
   double _minY = double.infinity;
   // max y value in array
   double _maxY = -double.infinity;
 
-  void addData(Vector2 data) {
-    while (_points.length + 1 > limit) {
-      final pop = _points[0].y;
-      _points.removeAt(0);
+  void addData(double x, double y) {
+    while (_yData.length + 1 > limit) {
+      final pop = _yData[0];
+      _xData.removeFirst();
+      _yData.removeFirst();
       // the removed one is region max, find a new one.
       // can have a better way to do this, but currently is good enough
       if ((pop - _maxY).abs() < 1e-6) {
-        _maxY = _points.reduce((value, element) {
-          if (value.y > element.y) {
-            return value;
-          }
-          return element;
-        }).y;
+        _maxY = _yData.maximum();
       }
       if ((pop - _minY).abs() < 1e-6) {
-        _minY = _points.reduce((value, element) {
-          if (value.y < element.y) {
-            return value;
-          }
-          return element;
-        }).y;
+        _minY = _yData.minimum();
       }
     }
 
-    if (data.y > _maxY) {
-      _maxY = data.y;
+    if (y > _maxY) {
+      _maxY = y;
     }
-    if (data.y < _minY) {
-      _minY = data.y;
+    if (y < _minY) {
+      _minY = y;
     }
-    _points.add(data);
+    _xData.add(x);
+    _yData.add(y);
   }
 
   void reset() {
-    _points.clear();
+    _xData.clear();
+    _yData.clear();
     _minY = double.infinity;
     _maxY = -double.infinity;
   }
@@ -156,12 +152,12 @@ class LineChartData {
     return Line._private(this, color, strokeWidth);
   }
 
-  bool get isEmpty => _points.isEmpty;
-  int get length => _points.length;
+  bool get isEmpty => _xData.isEmpty;
+  int get length => _xData.length;
 
-  Vector2 get first => _points.first;
-  Vector2 get last => _points.last;
-  Vector2 operator [](int index) => _points[index];
+  (double, double) get first => (_xData.first, _yData.first);
+  (double, double) get last => (_xData.last, _yData.last);
+  (double, double) operator [](int index) => (_xData[index], _yData[index]);
 
   double get minY => _minY;
   double get maxY => _maxY;
@@ -190,29 +186,34 @@ class _ChartPainter extends CustomPainter {
   }
 
   void paintLine(Canvas canvas, Size size, Line line) {
+    Path path = Path();
     Paint paint = Paint()
       ..color = line.color
       ..style = PaintingStyle.stroke
       ..strokeWidth = line.strokeWidth;
 
-    Path path = Path();
+    final xLen = maxX - minX;
+    final yLen = maxY - minY;
+
+    final stepX = size.width / xLen;
+    final stepY = size.height / yLen;
     // the canvas start from the top left corner so y needs to reverse (height - y)
-    final first = normalize(line.data.first, size);
+    final data = line.data;
+    // normalize
+    final x = (data._xData[0] - minX) * stepX;
+    final y = (data._yData[0] - minY) * stepY;
+
     // go to the first point
-    path.moveTo(first.x, size.height - first.y);
+    path.moveTo(x, size.height - y);
     for (int i = 1; i < line.data.length; i++) {
-      final vec2 = normalize(line.data[i], size);
-      path.lineTo(vec2.x, size.height - vec2.y);
+      // normalize
+      final x = (data._xData[i] - minX) * stepX;
+      final y = (data._yData[i] - minY) * stepY;
+      // reverse (height - y)
+      path.lineTo(x, size.height - y);
     }
 
     canvas.drawPath(path, paint);
-  }
-
-  Vector2 normalize(Vector2 vec, Size size) {
-    final stepX = size.width / (maxX - minX);
-    final stepY = size.height / (maxY - minY);
-
-    return Vector2((vec.x - minX) * stepX, (vec.y - minY) * stepY);
   }
 
   // set this to true to prevent stutter!

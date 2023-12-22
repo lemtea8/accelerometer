@@ -79,7 +79,7 @@ class App extends ConsumerWidget {
       themeMode: ref.watch(brightnessProvider) == Brightness.light
           ? ThemeMode.light
           : ThemeMode.dark,
-      home: const Home(),
+      home: const StressTest(),
     );
   }
 }
@@ -167,7 +167,7 @@ class _HomeState extends ConsumerState<Home> {
               child: GraphCard(
                 child: haveSensor
                     ? const UserAccChart()
-                    : const SineChart(count: count),
+                    : const SineChart(count: count, strokeWidth: 3),
               ),
             ),
             const SizedBox(height: 26),
@@ -180,7 +180,7 @@ class _HomeState extends ConsumerState<Home> {
               child: GraphCard(
                 child: haveSensor
                     ? const AccChart()
-                    : const SineChart(count: count),
+                    : const SineChart(count: count, strokeWidth: 3),
               ),
             ),
             const SizedBox(height: 84),
@@ -369,7 +369,8 @@ class _AccChartState extends State<AccChart> {
 
 class SineChart extends StatefulWidget {
   final int count;
-  const SineChart({super.key, required this.count});
+  final double strokeWidth;
+  const SineChart({super.key, required this.count, required this.strokeWidth});
 
   @override
   State<SineChart> createState() => _SineChartState();
@@ -430,7 +431,7 @@ class _SineChartState extends State<SineChart>
         }
         return LineChart(
           lines: [
-            _line1.asLine(color: color1, strokeWidth: 3),
+            _line1.asLine(color: color1, strokeWidth: widget.strokeWidth),
             // _line2.asLine(color: color2, strokeWidth: 3),
           ],
           showLabel: false,
@@ -538,12 +539,24 @@ class _StressTestState extends State<StressTest> {
 
   @override
   Widget build(BuildContext context) {
+    double strokeWidth;
+    switch (count) {
+      case <= 2:
+        strokeWidth = 5;
+      case <= 4:
+        strokeWidth = 3;
+      case <= 6:
+        strokeWidth = 2;
+      default:
+        strokeWidth = 1;
+    }
+
     final chart = Expanded(
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: ColoredBox(
           color: Theme.of(context).focusColor,
-          child: const SineChart(count: 250),
+          child: SineChart(count: 250, strokeWidth: strokeWidth),
         ),
       ),
     );

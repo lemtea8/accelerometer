@@ -308,8 +308,8 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
                     strokeWidth: 1,
                   ),
                 ],
-                minX: _accLine.first.$1,
-                maxX: _accLine.first.$1 + count * _step,
+                minX: _accLine.firstX,
+                maxX: _accLine.firstX + count * _step,
                 minY: 0,
                 labelCount: 5,
               ),
@@ -358,8 +358,8 @@ class _AccChartState extends State<AccChart> {
               strokeWidth: 1,
             ),
           ],
-          minX: _accLine.first.$1,
-          maxX: _accLine.first.$1 + count * _step,
+          minX: _accLine.firstX,
+          maxX: _accLine.firstX + count * _step,
           labelCount: 5,
         );
       },
@@ -435,8 +435,8 @@ class _SineChartState extends State<SineChart>
             // _line2.asLine(color: color2, strokeWidth: 3),
           ],
           showLabel: false,
-          minX: _line1.first.$1,
-          maxX: _line1.first.$1 + widget.count * _step,
+          minX: _line1.firstX,
+          maxX: _line1.firstX + widget.count * _step,
           minY: -3,
           maxY: 3,
         );
@@ -500,8 +500,8 @@ class _SingleStreamChartState extends State<SingleStreamChart> {
               strokeWidth: 1,
             ),
           ],
-          minX: _line.first.$1,
-          maxX: _line.first.$1 + count * _step,
+          minX: _line.firstX,
+          maxX: _line.firstX + count * _step,
         );
       },
     );
@@ -539,17 +539,7 @@ class _StressTestState extends State<StressTest> {
 
   @override
   Widget build(BuildContext context) {
-    double strokeWidth;
-    switch (count) {
-      case <= 2:
-        strokeWidth = 5;
-      case <= 4:
-        strokeWidth = 3;
-      case <= 6:
-        strokeWidth = 2;
-      default:
-        strokeWidth = 1;
-    }
+    double strokeWidth = MediaQuery.of(context).size.width / count / 100;
 
     final chart = Expanded(
       child: Padding(

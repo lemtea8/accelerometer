@@ -30,8 +30,6 @@ class LineChart extends StatefulWidget {
 }
 
 class _LineChartState extends State<LineChart> {
-  double labelWidth = 40.0;
-
   @override
   void initState() {
     super.initState();
@@ -43,51 +41,54 @@ class _LineChartState extends State<LineChart> {
     final maxX = widget.maxX ?? widget.lines[0].data._xData.last;
     final minY = widget.minY ?? widget.lines[0].data._minY;
     final maxY = widget.maxY ?? widget.lines[0].data._maxY;
-    final labelSize =
-        widget.lableSize ?? Theme.of(context).textTheme.labelLarge!.fontSize!;
-    labelWidth = widget.showLabel ? labelSize * 3 : 0;
-    return ClipRect(
-      child: Stack(
-        children: [
-          // meter
-          Positioned.fill(
+
+    final fontSize = Theme.of(context).textTheme.labelLarge!.fontSize!;
+    final labelSize = widget.lableSize ?? fontSize;
+    final double labelWidth = widget.showLabel ? labelSize * 3 : 0;
+    final double topBottomPadding = widget.showLabel ? labelSize / 2 : 0;
+
+    return Stack(
+      children: [
+        // meter
+        Positioned.fill(
+          child: RepaintBoundary(
+            child: CustomPaint(
+              painter: _MeterPainter(
+                color: Theme.of(context).colorScheme.onBackground,
+                showLabel: widget.showLabel,
+                labelFontSize: labelSize,
+                labelCount: widget.labelCount,
+                labelWidth: labelWidth,
+                minY: minY,
+                maxY: maxY,
+              ),
+              willChange: true,
+            ),
+          ),
+        ),
+        // chart
+        Positioned.fill(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: labelWidth,
+              top: topBottomPadding,
+              bottom: topBottomPadding,
+            ),
             child: RepaintBoundary(
               child: CustomPaint(
-                painter: _MeterPainter(
-                  color: Theme.of(context).colorScheme.onBackground,
-                  showLabel: widget.showLabel,
-                  labelFontSize: labelSize,
-                  labelCount: widget.labelCount,
-                  labelWidth: labelWidth,
+                painter: _ChartPainter(
+                  widget.lines,
+                  minX: minX,
+                  maxX: maxX,
                   minY: minY,
                   maxY: maxY,
                 ),
+                willChange: true,
               ),
             ),
           ),
-          // chart
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.only(
-                left: labelWidth,
-                top: labelSize / 2,
-                bottom: labelSize / 2,
-              ),
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  painter: _ChartPainter(
-                    widget.lines,
-                    minX: minX,
-                    maxX: maxX,
-                    minY: minY,
-                    maxY: maxY,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -155,8 +156,8 @@ class LineChartData {
   bool get isEmpty => _xData.isEmpty;
   int get length => _xData.length;
 
-  (double, double) get first => (_xData.first, _yData.first);
-  (double, double) get last => (_xData.last, _yData.last);
+  double get firstX => _xData.first;
+  double get lastX => _xData.last;
   (double, double) operator [](int index) => (_xData[index], _yData[index]);
 
   double get minY => _minY;
@@ -186,12 +187,12 @@ class _ChartPainter extends CustomPainter {
   }
 
   void paintLine(Canvas canvas, Size size, Line line) {
-    Path path = Path();
     Paint paint = Paint()
       ..color = line.color
       ..style = PaintingStyle.stroke
       ..strokeWidth = line.strokeWidth;
 
+    Path path = Path();
     final xLen = maxX - minX;
     final yLen = maxY - minY;
 
@@ -212,7 +213,7 @@ class _ChartPainter extends CustomPainter {
       // reverse (height - y)
       path.lineTo(x, size.height - y);
     }
-
+    canvas.clipRect(Rect.fromLTRB(0, 0, size.width, size.height));
     canvas.drawPath(path, paint);
   }
 

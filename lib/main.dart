@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:accelerometer/line_chart.dart';
@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 const sampleInterval = SensorInterval.gameInterval;
-const count = 500;
+const limit = 500;
 
 final haveSensor = Platform.isAndroid || Platform.isIOS;
 
@@ -37,7 +37,6 @@ void main() async {
 class App extends ConsumerWidget {
   const App({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
@@ -167,7 +166,11 @@ class _HomeState extends ConsumerState<Home> {
               child: GraphCard(
                 child: haveSensor
                     ? const UserAccChart()
-                    : const SineChart(count: count, strokeWidth: 3),
+                    : const SineChart(
+                        limit: limit,
+                        strokeWidth: 3,
+                        lineCount: 2,
+                      ),
               ),
             ),
             const SizedBox(height: 26),
@@ -180,7 +183,11 @@ class _HomeState extends ConsumerState<Home> {
               child: GraphCard(
                 child: haveSensor
                     ? const AccChart()
-                    : const SineChart(count: count, strokeWidth: 3),
+                    : const SineChart(
+                        limit: limit,
+                        strokeWidth: 3,
+                        lineCount: 2,
+                      ),
               ),
             ),
             const SizedBox(height: 84),
@@ -221,7 +228,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
 
   late final Stream<UserAccelerometerEvent> _stream;
   StreamSubscription? _subscription;
-  late final _accLine = LineChartData(limit: count);
+  late final _accLine = LineChartData(limit: limit);
   final _currValue = ValueNotifier(0.0);
   final _maxValue = ValueNotifier(0.0);
   final _graphNotifier = ValueNotifier(0.0);
@@ -239,7 +246,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
         return;
       }
       final sum = event.x * event.x + event.y * event.y + event.z * event.z;
-      final acc = sqrt(sum);
+      final acc = math.sqrt(sum);
       // debounce label
       if (x.round() % 10 == 0) {
         _currValue.value = acc;
@@ -309,7 +316,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
                   ),
                 ],
                 minX: _accLine.firstX,
-                maxX: _accLine.firstX + count * _step,
+                maxX: _accLine.firstX + limit * _step,
                 minY: 0,
                 labelCount: 5,
               ),
@@ -334,7 +341,7 @@ class _AccChartState extends State<AccChart> {
   late final Stream<AccelerometerEvent> _stream = accelerometerEventStream(
     samplingPeriod: sampleInterval,
   );
-  late final _accLine = LineChartData(limit: count);
+  late final _accLine = LineChartData(limit: limit);
 
   double x = 0.0;
 
@@ -348,7 +355,7 @@ class _AccChartState extends State<AccChart> {
         }
         final v = snapshot.data!;
         final sum = v.x * v.x + v.y * v.y + v.z * v.z;
-        final acc = sqrt(sum);
+        final acc = math.sqrt(sum);
         _accLine.addData(x, acc);
         x += _step;
         return LineChart(
@@ -359,7 +366,7 @@ class _AccChartState extends State<AccChart> {
             ),
           ],
           minX: _accLine.firstX,
-          maxX: _accLine.firstX + count * _step,
+          maxX: _accLine.firstX + limit * _step,
           labelCount: 5,
         );
       },
@@ -368,48 +375,63 @@ class _AccChartState extends State<AccChart> {
 }
 
 class SineChart extends StatefulWidget {
-  final int count;
+  final int limit;
+  final int lineCount;
   final double strokeWidth;
-  const SineChart({super.key, required this.count, required this.strokeWidth});
+  const SineChart({
+    super.key,
+    required this.limit,
+    required this.lineCount,
+    required this.strokeWidth,
+  });
 
   @override
   State<SineChart> createState() => _SineChartState();
 }
 
-final rand = Random();
+final rand = math.Random();
 
 class _SineChartState extends State<SineChart>
     with SingleTickerProviderStateMixin {
-  final _step = 0.07;
-
-  late final _line1 = LineChartData(limit: widget.count);
-  // late final _line2 = LineChartData(limit: widget.count);
-  late final color1 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
-  // late final color2 = Colors.primaries[rand.nextInt(Colors.primaries.length)];
-  late final mul1 = rand.nextInt(9) + 7; // 7-15
-  late final mul2 = rand.nextInt(6) + 16; // 16-21
-  late final div1 = rand.nextInt(6) + 4; // 4-9
-  late final div2 = rand.nextInt(5) + 10; // 10-14
-
   late final AnimationController _controller;
 
+  final _lines = <LineChartData>[];
+  final _colors = <Color>[];
+  final _funcs = <double Function(double)>[];
+
+  final _step = 0.07;
   double x = rand.nextDouble() + rand.nextInt(5);
+
+  double Function(double x) randomSineWaveFunction() {
+    final mul1 = rand.nextInt(9) + 7; // 7-15
+    final mul2 = rand.nextInt(6) + 16; // 16-21
+    final div1 = rand.nextInt(6) + 4; // 4-9
+    final div2 = rand.nextInt(5) + 10; // 10-14
+    return (double x) =>
+        math.sin(mul1 * x / div1) +
+        math.cos(mul2 * x / div2) -
+        math.sin(mul2 * x / div1) -
+        math.cos(mul1 * x / div2);
+  }
 
   @override
   void initState() {
+    assert(widget.lineCount > 0);
+
+    for (int i = 0; i < widget.lineCount; i++) {
+      _lines.add(LineChartData(limit: widget.limit));
+      _colors.add(Colors.primaries[rand.nextInt(Colors.primaries.length)]);
+      _funcs.add(randomSineWaveFunction());
+    }
     // rebuild every frame
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat();
     _controller.addListener(() {
-      final value = sin(mul1 * x / div1) +
-          cos(mul2 * x / div2) -
-          sin(mul2 * x / div1) -
-          cos(mul1 * x / div2);
-      _line1.addData(x, value);
-      // final value2 = cos(mul1 * x / div1) - sin(mul2 * x / div2);
-      // _line2.addData(x, value2);
+      for (int i = 0; i < _lines.length; i++) {
+        _lines[i].addData(x, _funcs[i](x));
+      }
       x += _step;
     });
     super.initState();
@@ -426,17 +448,20 @@ class _SineChartState extends State<SineChart>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        if (_line1.isEmpty) {
+        if (_lines.first.isEmpty) {
           return const SizedBox();
         }
         return LineChart(
           lines: [
-            _line1.asLine(color: color1, strokeWidth: widget.strokeWidth),
-            // _line2.asLine(color: color2, strokeWidth: 3),
+            for (int i = 0; i < _lines.length; i++)
+              _lines[i].asLine(
+                color: _colors[i],
+                strokeWidth: widget.strokeWidth,
+              ),
           ],
           showLabel: false,
-          minX: _line1.firstX,
-          maxX: _line1.firstX + widget.count * _step,
+          minX: _lines.first.firstX,
+          maxX: _lines.first.firstX + widget.limit * _step,
           minY: -3,
           maxY: 3,
         );
@@ -452,7 +477,7 @@ class RandomChart extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleStreamChart(
       stream: () async* {
-        final rand = Random();
+        final rand = math.Random();
         while (true) {
           await Future.delayed(sampleInterval);
           yield rand.nextDouble() * 5;
@@ -501,7 +526,7 @@ class _SingleStreamChartState extends State<SingleStreamChart> {
             ),
           ],
           minX: _line.firstX,
-          maxX: _line.firstX + count * _step,
+          maxX: _line.firstX + limit * _step,
         );
       },
     );
@@ -516,7 +541,7 @@ class StressTest extends StatefulWidget {
 }
 
 class _StressTestState extends State<StressTest> {
-  int count = 1;
+  int limit = 1;
   final frameTime = ValueNotifier(const Duration(seconds: 1).inMicroseconds);
 
   @override
@@ -534,19 +559,23 @@ class _StressTestState extends State<StressTest> {
   void callback(List<FrameTiming> timings) {
     final time1 = timings.last.rasterDuration.inMicroseconds;
     final time2 = timings.last.buildDuration.inMicroseconds;
-    frameTime.value = max(time1, time2);
+    frameTime.value = math.max(time1, time2);
   }
 
   @override
   Widget build(BuildContext context) {
-    double strokeWidth = MediaQuery.of(context).size.width / count / 100;
+    double strokeWidth = MediaQuery.of(context).size.shortestSide / limit / 75;
 
     final chart = Expanded(
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: ColoredBox(
           color: Theme.of(context).focusColor,
-          child: SineChart(count: 250, strokeWidth: strokeWidth),
+          child: SineChart(
+            limit: 250,
+            strokeWidth: strokeWidth,
+            lineCount: 1,
+          ),
         ),
       ),
     );
@@ -568,10 +597,10 @@ class _StressTestState extends State<StressTest> {
       ),
       body: Column(
         children: List.filled(
-          count * 2,
+          limit * 2,
           Expanded(
             child: Row(
-              children: List.filled(count, chart),
+              children: List.filled(limit, chart),
             ),
           ),
         ),
@@ -580,11 +609,11 @@ class _StressTestState extends State<StressTest> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Visibility(
-            visible: count <= 15,
+            visible: limit <= 15,
             child: FloatingActionButton(
               onPressed: () {
                 setState(() {
-                  count++;
+                  limit++;
                 });
               },
               child: const Icon(Icons.keyboard_double_arrow_up),
@@ -592,14 +621,14 @@ class _StressTestState extends State<StressTest> {
           ),
           const SizedBox(height: 12),
           Visibility(
-            visible: count != 1,
+            visible: limit != 1,
             maintainAnimation: true,
             maintainSize: true,
             maintainState: true,
             child: FloatingActionButton(
               onPressed: () {
                 setState(() {
-                  count--;
+                  limit--;
                 });
               },
               child: const Icon(Icons.keyboard_double_arrow_down),

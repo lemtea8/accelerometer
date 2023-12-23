@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:accelerometer/buffered_list.dart';
 import 'package:flutter/material.dart';
@@ -71,6 +71,7 @@ class _LineChartState extends State<LineChart> {
           child: Padding(
             padding: EdgeInsets.only(
               left: labelWidth,
+              // these paddings are for aligning labels
               top: topBottomPadding,
               bottom: topBottomPadding,
             ),
@@ -132,12 +133,8 @@ class LineChartData {
       }
     }
 
-    if (y > _maxY) {
-      _maxY = y;
-    }
-    if (y < _minY) {
-      _minY = y;
-    }
+    _maxY = max(_maxY, y);
+    _minY = min(_minY, y);
     _xData.add(x);
     _yData.add(y);
   }
@@ -319,7 +316,21 @@ class _MeterPainter extends CustomPainter {
 
 extension RoundDouble on double {
   double roundToPrecision(int precision) {
-    final val = pow(10.0, precision);
+    final val = math.pow(10.0, precision);
     return ((this * val).round().toDouble() / val);
   }
+}
+
+double max(double n1, double n2) {
+  if (n1 > n2) {
+    return n1;
+  }
+  return n2;
+}
+
+double min(double n1, double n2) {
+  if (n1 < n2) {
+    return n1;
+  }
+  return n2;
 }

@@ -54,7 +54,7 @@ class _LineChartState extends State<LineChart> {
           child: RepaintBoundary(
             child: CustomPaint(
               painter: _MeterPainter(
-                color: Theme.of(context).colorScheme.onBackground,
+                color: Theme.of(context).colorScheme.onSurface,
                 showLabel: widget.showLabel,
                 labelFontSize: labelSize,
                 labelCount: widget.labelCount,
@@ -125,16 +125,16 @@ class LineChartData {
       _yData.removeFirst();
       // the removed one is region max, find a new one.
       // can have a better way to do this, but currently is good enough
-      if ((pop - _maxY).abs() < 1e-6) {
+      if ((pop - _maxY).abs() < 1e-4) {
         _maxY = _yData.maximum();
       }
-      if ((pop - _minY).abs() < 1e-6) {
+      if ((pop - _minY).abs() < 1e-4) {
         _minY = _yData.minimum();
       }
     }
 
-    _maxY = max(_maxY, y);
-    _minY = min(_minY, y);
+    _maxY = math.max(_maxY, y);
+    _minY = math.min(_minY, y);
     _xData.add(x);
     _yData.add(y);
   }
@@ -319,18 +319,4 @@ extension RoundDouble on double {
     final val = math.pow(10.0, precision);
     return ((this * val).round().toDouble() / val);
   }
-}
-
-double max(double n1, double n2) {
-  if (n1 > n2) {
-    return n1;
-  }
-  return n2;
-}
-
-double min(double n1, double n2) {
-  if (n1 < n2) {
-    return n1;
-  }
-  return n2;
 }

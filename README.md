@@ -2,4 +2,4 @@
 An accelerometer made Flutter.
 
 # Screenshot
-![](https://github.com/lemtea8/accelerometer/blob/master/doc/screenshot.jpg)
+<img src="https://github.com/lemtea8/accelerometer/blob/master/doc/screenshot.jpg" width="300"/>

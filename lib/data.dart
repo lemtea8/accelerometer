@@ -32,9 +32,9 @@ Stream<ChartPoint> sineData(Duration smaplingPeriod) async* {
   final sineFunc = _randomSineWaveFunction();
   final watch = Stopwatch()..start();
   while (true) {
+    await Future.delayed(smaplingPeriod);
     final t = watch.elapsedMilliseconds.toDouble();
     yield ChartPoint(t, sineFunc(t));
-    await Future.delayed(smaplingPeriod);
   }
 }
 

@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
 
+import 'package:accelerometer/data.dart';
 import 'package:accelerometer/line_chart.dart';
 import 'package:accelerometer/providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:system_theme/system_theme.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 const sampleInterval = SensorInterval.gameInterval;
@@ -20,11 +20,18 @@ final haveSensor = Platform.isAndroid || Platform.isIOS;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent),
+  );
+
   final prefs = await SharedPreferences.getInstance();
   WakelockPlus.enable();
+  await SystemTheme.accentColor.load();
 
   runApp(
     ProviderScope(
@@ -39,14 +46,23 @@ class App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = ref.watch(brightnessProvider);
+    final accentColor = SystemTheme.accentColor.accent;
+    Color cardColor;
+    if (brightness == Brightness.light) {
+      cardColor = accentColor.withOpacity(0.75);
+    } else {
+      cardColor = accentColor;
+    }
+
     return MaterialApp(
       title: 'Accelerometer',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorSchemeSeed: Colors.lime,
-        appBarTheme: AppBarTheme(color: Colors.lime.shade100),
+        colorSchemeSeed: accentColor,
+        appBarTheme: AppBarTheme(color: cardColor),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: Colors.lime.shade100,
+          backgroundColor: SystemTheme.accentColor.lightest,
           elevation: 0,
           hoverElevation: 0,
           focusElevation: 0,
@@ -54,15 +70,15 @@ class App extends ConsumerWidget {
         ),
         cardTheme: CardTheme(
           shadowColor: Colors.transparent,
-          color: Colors.lime.shade100,
+          color: cardColor,
         ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
-        colorSchemeSeed: Colors.amber,
-        appBarTheme: AppBarTheme(color: Colors.brown.shade800),
+        colorSchemeSeed: accentColor,
+        appBarTheme: AppBarTheme(color: cardColor),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: Colors.brown.shade800,
+          backgroundColor: SystemTheme.accentColor.lightest,
           elevation: 0,
           hoverElevation: 0,
           focusElevation: 0,
@@ -70,15 +86,14 @@ class App extends ConsumerWidget {
         ),
         cardTheme: CardTheme(
           shadowColor: Colors.transparent,
-          color: Colors.brown.shade800,
+          color: cardColor,
         ),
         brightness: Brightness.dark,
         useMaterial3: true,
       ),
-      themeMode: ref.watch(brightnessProvider) == Brightness.light
-          ? ThemeMode.light
-          : ThemeMode.dark,
-      home: const StressTest(),
+      themeMode:
+          brightness == Brightness.light ? ThemeMode.light : ThemeMode.dark,
+      home: const Home(),
     );
   }
 }
@@ -166,16 +181,15 @@ class _HomeState extends ConsumerState<Home> {
               child: GraphCard(
                 child: haveSensor
                     ? const UserAccChart()
-                    : const SineChart(
-                        limit: limit,
-                        strokeWidth: 3,
-                        lineCount: 2,
+                    : Chart(
+                        stream: sineData(sampleInterval),
+                        strokeWidth: 2,
                       ),
               ),
             ),
             const SizedBox(height: 26),
             Text(
-              'Acceleration (including gravity)',
+              'Gravity',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Expanded(
@@ -183,10 +197,9 @@ class _HomeState extends ConsumerState<Home> {
               child: GraphCard(
                 child: haveSensor
                     ? const AccChart()
-                    : const SineChart(
-                        limit: limit,
-                        strokeWidth: 3,
-                        lineCount: 2,
+                    : Chart(
+                        stream: sineData(sampleInterval),
+                        strokeWidth: 2,
                       ),
               ),
             ),
@@ -212,6 +225,53 @@ class GraphCard extends StatelessWidget {
           child: child,
         ),
       ),
+    );
+  }
+}
+
+class Chart extends ConsumerStatefulWidget {
+  const Chart({
+    super.key,
+    required this.stream,
+    this.strokeWidth = 1,
+    this.lineColor,
+  });
+
+  final Stream<ChartPoint> stream;
+  final double strokeWidth;
+  final Color? lineColor;
+
+  @override
+  ConsumerState<Chart> createState() => _ChartState();
+}
+
+class _ChartState extends ConsumerState<Chart> {
+  final _line = LineChartData(limit: limit);
+
+  @override
+  void initState() {
+    widget.stream.listen((data) {
+      _line.addData(data.time, data.value);
+      setState(() {});
+    });
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_line.isEmpty) {
+      return const SizedBox();
+    }
+    return LineChart(
+      lines: [
+        _line.asLine(
+          color: widget.lineColor ?? Theme.of(context).colorScheme.onSurface,
+          strokeWidth: widget.strokeWidth,
+        ),
+      ],
+      minX: _line.firstX,
+      maxX: _line.firstX + (limit * sampleInterval.inMilliseconds),
+      labelCount: 5,
     );
   }
 }
@@ -275,6 +335,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
     ref.listen(restartProvider, (previous, next) {
       _accLine.reset();
       _maxValue.value = 0.0;
+      _graphNotifier.value = 0;
     });
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -311,7 +372,7 @@ class _UserAccChartState extends ConsumerState<UserAccChart> {
               child: LineChart(
                 lines: [
                   _accLine.asLine(
-                    color: Theme.of(context).colorScheme.onBackground,
+                    color: Theme.of(context).colorScheme.onSurface,
                     strokeWidth: 1,
                   ),
                 ],
@@ -361,7 +422,7 @@ class _AccChartState extends State<AccChart> {
         return LineChart(
           lines: [
             _accLine.asLine(
-              color: Theme.of(context).colorScheme.onBackground,
+              color: Theme.of(context).colorScheme.onSurface,
               strokeWidth: 1,
             ),
           ],
@@ -370,272 +431,6 @@ class _AccChartState extends State<AccChart> {
           labelCount: 5,
         );
       },
-    );
-  }
-}
-
-class SineChart extends StatefulWidget {
-  final int limit;
-  final int lineCount;
-  final double strokeWidth;
-  const SineChart({
-    super.key,
-    required this.limit,
-    required this.lineCount,
-    required this.strokeWidth,
-  });
-
-  @override
-  State<SineChart> createState() => _SineChartState();
-}
-
-final rand = math.Random();
-
-class _SineChartState extends State<SineChart>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  final _lines = <LineChartData>[];
-  final _colors = <Color>[];
-  final _funcs = <double Function(double)>[];
-
-  final _step = 0.07;
-  double x = rand.nextDouble() + rand.nextInt(5);
-
-  double Function(double x) randomSineWaveFunction() {
-    final mul1 = rand.nextInt(9) + 7; // 7-15
-    final mul2 = rand.nextInt(6) + 16; // 16-21
-    final div1 = rand.nextInt(6) + 4; // 4-9
-    final div2 = rand.nextInt(5) + 10; // 10-14
-    return (double x) =>
-        math.sin(mul1 * x / div1) +
-        math.cos(mul2 * x / div2) -
-        math.sin(mul2 * x / div1) -
-        math.cos(mul1 * x / div2);
-  }
-
-  @override
-  void initState() {
-    assert(widget.lineCount > 0);
-
-    for (int i = 0; i < widget.lineCount; i++) {
-      _lines.add(LineChartData(limit: widget.limit));
-      _colors.add(Colors.primaries[rand.nextInt(Colors.primaries.length)]);
-      _funcs.add(randomSineWaveFunction());
-    }
-    // rebuild every frame
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat();
-    _controller.addListener(() {
-      for (int i = 0; i < _lines.length; i++) {
-        _lines[i].addData(x, _funcs[i](x));
-      }
-      x += _step;
-    });
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        if (_lines.first.isEmpty) {
-          return const SizedBox();
-        }
-        return LineChart(
-          lines: [
-            for (int i = 0; i < _lines.length; i++)
-              _lines[i].asLine(
-                color: _colors[i],
-                strokeWidth: widget.strokeWidth,
-              ),
-          ],
-          showLabel: false,
-          minX: _lines.first.firstX,
-          maxX: _lines.first.firstX + widget.limit * _step,
-          minY: -3,
-          maxY: 3,
-        );
-      },
-    );
-  }
-}
-
-class RandomChart extends StatelessWidget {
-  const RandomChart({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleStreamChart(
-      stream: () async* {
-        final rand = math.Random();
-        while (true) {
-          await Future.delayed(sampleInterval);
-          yield rand.nextDouble() * 5;
-        }
-      }(),
-      limit: 500,
-    );
-  }
-}
-
-class SingleStreamChart extends StatefulWidget {
-  final Stream<double> stream;
-  final int limit;
-
-  const SingleStreamChart({
-    super.key,
-    required this.stream,
-    required this.limit,
-  });
-
-  @override
-  State<SingleStreamChart> createState() => _SingleStreamChartState();
-}
-
-class _SingleStreamChartState extends State<SingleStreamChart> {
-  late final _line = LineChartData(limit: widget.limit);
-  final _step = 1.0;
-  double x = 0.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder(
-      stream: widget.stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SizedBox();
-        }
-        final v = snapshot.data!;
-        _line.addData(x, v);
-        x += 1.0;
-        return LineChart(
-          lines: [
-            _line.asLine(
-              color: Theme.of(context).colorScheme.onBackground,
-              strokeWidth: 1,
-            ),
-          ],
-          minX: _line.firstX,
-          maxX: _line.firstX + limit * _step,
-        );
-      },
-    );
-  }
-}
-
-class StressTest extends StatefulWidget {
-  const StressTest({super.key});
-
-  @override
-  State<StressTest> createState() => _StressTestState();
-}
-
-class _StressTestState extends State<StressTest> {
-  int limit = 1;
-  final frameTime = ValueNotifier(const Duration(seconds: 1).inMicroseconds);
-
-  @override
-  void initState() {
-    SchedulerBinding.instance.addTimingsCallback(callback);
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    SchedulerBinding.instance.removeTimingsCallback(callback);
-    super.dispose();
-  }
-
-  void callback(List<FrameTiming> timings) {
-    final time1 = timings.last.rasterDuration.inMicroseconds;
-    final time2 = timings.last.buildDuration.inMicroseconds;
-    frameTime.value = math.max(time1, time2);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    double strokeWidth = MediaQuery.of(context).size.shortestSide / limit / 75;
-
-    final chart = Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(3),
-        child: ColoredBox(
-          color: Theme.of(context).focusColor,
-          child: SineChart(
-            limit: 250,
-            strokeWidth: strokeWidth,
-            lineCount: 1,
-          ),
-        ),
-      ),
-    );
-    return Scaffold(
-      appBar: AppBar(
-        actions: [
-          ValueListenableBuilder(
-            valueListenable: frameTime,
-            builder: (context, value, _) {
-              final fps = const Duration(seconds: 1).inMicroseconds / value;
-              return Text(
-                'fps: ${fps.toStringAsFixed(1).padLeft(5, ' ')}',
-                style: const TextStyle(fontFamily: 'robot-mono'),
-              );
-            },
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: Column(
-        children: List.filled(
-          limit * 2,
-          Expanded(
-            child: Row(
-              children: List.filled(limit, chart),
-            ),
-          ),
-        ),
-      ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Visibility(
-            visible: limit <= 15,
-            child: FloatingActionButton(
-              onPressed: () {
-                setState(() {
-                  limit++;
-                });
-              },
-              child: const Icon(Icons.keyboard_double_arrow_up),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Visibility(
-            visible: limit != 1,
-            maintainAnimation: true,
-            maintainSize: true,
-            maintainState: true,
-            child: FloatingActionButton(
-              onPressed: () {
-                setState(() {
-                  limit--;
-                });
-              },
-              child: const Icon(Icons.keyboard_double_arrow_down),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

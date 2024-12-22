@@ -269,10 +269,10 @@ class _ChartState extends ConsumerState<Chart> {
   @override
   void initState() {
     widget.stream.listen((data) {
+      _line.addData(data.time, data.value);
       if (ref.read(pausedProvider)) {
         return;
       }
-      _line.addData(data.time, data.value);
       setState(() {
         _max = _line.maxY;
         _current = _line.currentY;

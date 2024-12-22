@@ -201,7 +201,6 @@ class _HomeState extends ConsumerState<Home> {
                       ? accData(sampleInterval)
                       : sineData(sampleInterval),
                   strokeWidth: haveSensor ? 1 : 3,
-                  showMax: true,
                   showCurrent: true,
                 ),
               ),

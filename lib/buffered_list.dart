@@ -2,12 +2,19 @@
 import 'dart:typed_data';
 
 class BufferedFixedLengthList {
-  // single precision is enough
-  final Float32List _list;
+  final Float64List _list;
   int _start = 0;
   int _end = 0;
 
-  BufferedFixedLengthList(int length) : _list = Float32List(length * 2);
+  BufferedFixedLengthList(int length) : _list = Float64List(length * 2);
+
+  factory BufferedFixedLengthList.filled(int length, double value) {
+    final list = BufferedFixedLengthList(length);
+    for (int i = 0; i < length; i++) {
+      list.add(value);
+    }
+    return list;
+  }
 
   void add(double v) {
     _list[_end] = v;
@@ -57,9 +64,8 @@ class BufferedFixedLengthList {
   }
 
   void clear() {
-    final len = length;
     _start = 0;
-    _end = len;
+    _end = 0;
   }
 
   @override

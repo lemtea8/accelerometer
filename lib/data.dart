@@ -15,7 +15,7 @@ Stream<ChartPoint> userAccData(Duration samplingPeriod) async* {
   await for (final event in stream) {
     final sum = event.x * event.x + event.y * event.y + event.z * event.z;
     final acc = math.sqrt(sum);
-    yield ChartPoint(event.timestamp.millisecond.toDouble(), acc);
+    yield ChartPoint(event.timestamp.millisecondsSinceEpoch.toDouble(), acc);
   }
 }
 
@@ -24,17 +24,17 @@ Stream<ChartPoint> accData(Duration samplingPeriod) async* {
   await for (final event in stream) {
     final sum = event.x * event.x + event.y * event.y + event.z * event.z;
     final acc = math.sqrt(sum);
-    yield ChartPoint(event.timestamp.millisecond.toDouble(), acc);
+    yield ChartPoint(event.timestamp.millisecondsSinceEpoch.toDouble(), acc);
   }
 }
 
 Stream<ChartPoint> sineData(Duration smaplingPeriod) async* {
   final sineFunc = _randomSineWaveFunction();
-  final watch = Stopwatch()..start();
+  var x = 0.0;
   while (true) {
     await Future.delayed(smaplingPeriod);
-    final t = watch.elapsedMilliseconds.toDouble();
-    yield ChartPoint(t, sineFunc(t));
+    yield ChartPoint(x, sineFunc(x));
+    x += 0.05;
   }
 }
 

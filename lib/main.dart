@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:accelerometer/data.dart';
 import 'package:accelerometer/line_chart.dart';
@@ -50,7 +49,7 @@ class App extends ConsumerWidget {
     final accentColor = SystemTheme.accentColor.accent;
     Color cardColor;
     if (brightness == Brightness.light) {
-      cardColor = accentColor.withOpacity(0.75);
+      cardColor = accentColor.withAlpha(190);
     } else {
       cardColor = accentColor;
     }
@@ -62,7 +61,6 @@ class App extends ConsumerWidget {
         colorSchemeSeed: accentColor,
         appBarTheme: AppBarTheme(color: cardColor),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: SystemTheme.accentColor.lightest,
           elevation: 0,
           hoverElevation: 0,
           focusElevation: 0,
@@ -78,7 +76,6 @@ class App extends ConsumerWidget {
         colorSchemeSeed: accentColor,
         appBarTheme: AppBarTheme(color: cardColor),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: SystemTheme.accentColor.lightest,
           elevation: 0,
           hoverElevation: 0,
           focusElevation: 0,
@@ -148,6 +145,7 @@ class _HomeState extends ConsumerState<Home> {
               final v = ref.read(pausedProvider);
               ref.read(pausedProvider.notifier).state = !v;
             },
+            mini: true,
             child: Consumer(
               builder: (context, ref, _) {
                 if (ref.watch(pausedProvider)) {
@@ -157,12 +155,13 @@ class _HomeState extends ConsumerState<Home> {
               },
             ),
           ),
-          const SizedBox(height: 12, width: 12),
+          const SizedBox(height: 8, width: 8),
           FloatingActionButton(
             onPressed: () {
               ref.read(restartProvider.notifier).state =
                   !ref.read(restartProvider);
             },
+            mini: true,
             child: const Icon(Icons.refresh),
           ),
         ],
@@ -179,15 +178,20 @@ class _HomeState extends ConsumerState<Home> {
             Expanded(
               flex: 10,
               child: GraphCard(
-                child: haveSensor
-                    ? const UserAccChart()
+                chart: haveSensor
+                    ? Chart(
+                        stream: userAccData(sampleInterval),
+                        strokeWidth: 1,
+                      )
                     : Chart(
                         stream: sineData(sampleInterval),
-                        strokeWidth: 2,
+                        strokeWidth: 3,
                       ),
+                showMax: true,
+                showCurrent: true,
               ),
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 24),
             Text(
               'Gravity',
               style: Theme.of(context).textTheme.titleMedium,
@@ -195,15 +199,18 @@ class _HomeState extends ConsumerState<Home> {
             Expanded(
               flex: 9,
               child: GraphCard(
-                child: haveSensor
-                    ? const AccChart()
+                chart: haveSensor
+                    ? Chart(
+                        stream: accData(sampleInterval),
+                        strokeWidth: 1,
+                      )
                     : Chart(
                         stream: sineData(sampleInterval),
-                        strokeWidth: 2,
+                        strokeWidth: 3,
                       ),
               ),
             ),
-            const SizedBox(height: 84),
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -211,10 +218,23 @@ class _HomeState extends ConsumerState<Home> {
   }
 }
 
-class GraphCard extends StatelessWidget {
-  final Widget? child;
-  const GraphCard({super.key, this.child});
+class GraphCard extends StatefulWidget {
+  final Chart chart;
+  final bool showMax;
+  final bool showCurrent;
 
+  const GraphCard({
+    super.key,
+    required this.chart,
+    this.showMax = false,
+    this.showCurrent = false,
+  });
+
+  @override
+  State<GraphCard> createState() => _GraphCardState();
+}
+
+class _GraphCardState extends State<GraphCard> {
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -222,35 +242,52 @@ class GraphCard extends StatelessWidget {
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: child,
+          child: Column(
+            children: [
+              if (widget.showMax)
+                Text(
+                  'maximum: 0 m/s²',
+                  style: const TextStyle(fontFamily: 'robot-mono'),
+                ),
+              if (widget.showCurrent)
+                Text(
+                  'current: 0 m/s²',
+                  style: const TextStyle(fontFamily: 'robot-mono'),
+                ),
+              Expanded(child: widget.chart),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class Chart extends ConsumerStatefulWidget {
+class Chart extends StatefulWidget {
   const Chart({
     super.key,
     required this.stream,
     this.strokeWidth = 1,
     this.lineColor,
+    this.onData,
   });
 
   final Stream<ChartPoint> stream;
   final double strokeWidth;
   final Color? lineColor;
+  final Function(ChartPoint)? onData;
 
   @override
-  ConsumerState<Chart> createState() => _ChartState();
+  State<Chart> createState() => _ChartState();
 }
 
-class _ChartState extends ConsumerState<Chart> {
+class _ChartState extends State<Chart> {
   final _line = LineChartData(limit: limit);
 
   @override
   void initState() {
     widget.stream.listen((data) {
+      widget.onData?.call(data);
       _line.addData(data.time, data.value);
       setState(() {});
     });
@@ -269,168 +306,7 @@ class _ChartState extends ConsumerState<Chart> {
           strokeWidth: widget.strokeWidth,
         ),
       ],
-      minX: _line.firstX,
-      maxX: _line.firstX + (limit * sampleInterval.inMilliseconds),
       labelCount: 5,
-    );
-  }
-}
-
-class UserAccChart extends ConsumerStatefulWidget {
-  const UserAccChart({super.key});
-
-  @override
-  ConsumerState<UserAccChart> createState() => _UserAccChartState();
-}
-
-class _UserAccChartState extends ConsumerState<UserAccChart> {
-  static const _step = 1.0;
-
-  late final Stream<UserAccelerometerEvent> _stream;
-  StreamSubscription? _subscription;
-  late final _accLine = LineChartData(limit: limit);
-  final _currValue = ValueNotifier(0.0);
-  final _maxValue = ValueNotifier(0.0);
-  final _graphNotifier = ValueNotifier(0.0);
-
-  double x = 0.0;
-  bool _paused = false;
-
-  @override
-  void initState() {
-    _stream = userAccelerometerEventStream(
-      samplingPeriod: sampleInterval,
-    );
-    _subscription = _stream.listen((event) {
-      if (_paused) {
-        return;
-      }
-      final sum = event.x * event.x + event.y * event.y + event.z * event.z;
-      final acc = math.sqrt(sum);
-      // debounce label
-      if (x.round() % 10 == 0) {
-        _currValue.value = acc;
-      }
-      if (acc > _maxValue.value) {
-        _maxValue.value = acc;
-      }
-      _accLine.addData(x, acc);
-      x += _step;
-      _graphNotifier.value = x;
-    });
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    _subscription?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    ref.listen(pausedProvider, (previous, next) {
-      _paused = next;
-    });
-    ref.listen(restartProvider, (previous, next) {
-      _accLine.reset();
-      _maxValue.value = 0.0;
-      _graphNotifier.value = 0;
-    });
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      children: [
-        ValueListenableBuilder(
-          valueListenable: _maxValue,
-          builder: (context, value, _) {
-            final accStr = value.toStringAsFixed(2);
-            final text = 'maximum: $accStr m/s²';
-            return Text(
-              text,
-              style: const TextStyle(fontFamily: 'robot-mono'),
-            );
-          },
-        ),
-        ValueListenableBuilder(
-          valueListenable: _currValue,
-          builder: (context, value, _) {
-            final curr = value.toStringAsFixed(2);
-            final text = 'current: $curr m/s²';
-            return Text(
-              text,
-              style: const TextStyle(fontFamily: 'robot-mono'),
-            );
-          },
-        ),
-        ValueListenableBuilder(
-          valueListenable: _graphNotifier,
-          builder: (context, value, _) {
-            if (_accLine.isEmpty) {
-              return const SizedBox();
-            }
-            return Expanded(
-              child: LineChart(
-                lines: [
-                  _accLine.asLine(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    strokeWidth: 1,
-                  ),
-                ],
-                minX: _accLine.firstX,
-                maxX: _accLine.firstX + limit * _step,
-                minY: 0,
-                labelCount: 5,
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class AccChart extends StatefulWidget {
-  const AccChart({super.key});
-
-  @override
-  State<AccChart> createState() => _AccChartState();
-}
-
-class _AccChartState extends State<AccChart> {
-  static const _step = 1.0;
-
-  late final Stream<AccelerometerEvent> _stream = accelerometerEventStream(
-    samplingPeriod: sampleInterval,
-  );
-  late final _accLine = LineChartData(limit: limit);
-
-  double x = 0.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder(
-      stream: _stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SizedBox();
-        }
-        final v = snapshot.data!;
-        final sum = v.x * v.x + v.y * v.y + v.z * v.z;
-        final acc = math.sqrt(sum);
-        _accLine.addData(x, acc);
-        x += _step;
-        return LineChart(
-          lines: [
-            _accLine.asLine(
-              color: Theme.of(context).colorScheme.onSurface,
-              strokeWidth: 1,
-            ),
-          ],
-          minX: _accLine.firstX,
-          maxX: _accLine.firstX + limit * _step,
-          labelCount: 5,
-        );
-      },
     );
   }
 }

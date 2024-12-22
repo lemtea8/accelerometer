@@ -35,12 +35,21 @@ class _LineChartState extends State<LineChart> {
     super.initState();
   }
 
+  // Keep this function cost as less as possible
   @override
   Widget build(BuildContext context) {
-    final minX = widget.minX ?? widget.lines[0].data._xData.first;
-    final maxX = widget.maxX ?? widget.lines[0].data._xData.last;
-    final minY = widget.minY ?? widget.lines[0].data._minY;
-    final maxY = widget.maxY ?? widget.lines[0].data._maxY;
+    if (widget.lines[0].data.length <= 1) {
+      return const Placeholder();
+    }
+
+    final data = widget.lines[0].data;
+
+    final xStep = (data._xData.last - data._xData.first) / data._xData.length;
+    final minX = widget.minX ?? data._xData.first;
+    final maxX = widget.maxX ?? data._xData.first + xStep * data.limit;
+
+    final minY = widget.minY ?? data._minY;
+    final maxY = widget.maxY ?? data._maxY;
 
     final fontSize = Theme.of(context).textTheme.labelLarge!.fontSize!;
     final labelSize = widget.lableSize ?? fontSize;
@@ -249,7 +258,7 @@ class _MeterPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // for painting lines
     Paint paint = Paint()
-      ..color = color.withOpacity(0.2)
+      ..color = color.withAlpha(50)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -279,9 +288,13 @@ class _MeterPainter extends CustomPainter {
       final yPos = adjustedHight - (adjustedHight * i / divisions);
       final offset = Offset(0, yPos);
       if (showLabel) {
+        var text = meterValue.toStringAsFixed(2);
+        // Prevent -0.00 text when value is a small negative number
+        if (text == "-0.00") {
+          text = "0.00";
+        }
         final textSpan = TextSpan(
-          // prevent -0.00
-          text: meterValue.roundToPrecision(2).toStringAsFixed(2),
+          text: text,
           style: textStyle,
         );
         final textPainter = TextPainter(
@@ -311,12 +324,5 @@ class _MeterPainter extends CustomPainter {
   @override
   bool shouldRebuildSemantics(_MeterPainter oldDelegate) {
     return false;
-  }
-}
-
-extension RoundDouble on double {
-  double roundToPrecision(int precision) {
-    final val = math.pow(10.0, precision);
-    return ((this * val).round().toDouble() / val);
   }
 }

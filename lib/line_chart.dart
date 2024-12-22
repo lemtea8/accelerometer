@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:accelerometer/buffered_list.dart';
 import 'package:flutter/material.dart';
 
+// Multiple lines are not supported yet
 class LineChart extends StatefulWidget {
   final List<Line> lines;
   final bool showLabel;
@@ -39,11 +40,12 @@ class _LineChartState extends State<LineChart> {
   @override
   Widget build(BuildContext context) {
     if (widget.lines[0].data.length <= 1) {
-      return const Placeholder();
+      return const SizedBox();
     }
 
     final data = widget.lines[0].data;
 
+    // Estimate maxX if not specified
     final xStep = (data._xData.last - data._xData.first) / data._xData.length;
     final minX = widget.minX ?? data._xData.first;
     final maxX = widget.maxX ?? data._xData.first + xStep * data.limit;
@@ -168,6 +170,8 @@ class LineChartData {
 
   double get minY => _minY;
   double get maxY => _maxY;
+
+  double get currentY => _yData.last;
 }
 
 class _ChartPainter extends CustomPainter {

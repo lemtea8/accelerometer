@@ -178,17 +178,14 @@ class _HomeState extends ConsumerState<Home> {
             Expanded(
               flex: 10,
               child: GraphCard(
-                chart: haveSensor
-                    ? Chart(
-                        stream: userAccData(sampleInterval),
-                        strokeWidth: 1,
-                      )
-                    : Chart(
-                        stream: sineData(sampleInterval),
-                        strokeWidth: 3,
-                      ),
-                showMax: true,
-                showCurrent: true,
+                chart: Chart(
+                  stream: haveSensor
+                      ? userAccData(sampleInterval)
+                      : sineData(sampleInterval),
+                  strokeWidth: haveSensor ? 1 : 3,
+                  showMax: true,
+                  showCurrent: true,
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -199,15 +196,14 @@ class _HomeState extends ConsumerState<Home> {
             Expanded(
               flex: 9,
               child: GraphCard(
-                chart: haveSensor
-                    ? Chart(
-                        stream: accData(sampleInterval),
-                        strokeWidth: 1,
-                      )
-                    : Chart(
-                        stream: sineData(sampleInterval),
-                        strokeWidth: 3,
-                      ),
+                chart: Chart(
+                  stream: haveSensor
+                      ? accData(sampleInterval)
+                      : sineData(sampleInterval),
+                  strokeWidth: haveSensor ? 1 : 3,
+                  showMax: true,
+                  showCurrent: true,
+                ),
               ),
             ),
             const SizedBox(height: 100),
@@ -220,14 +216,10 @@ class _HomeState extends ConsumerState<Home> {
 
 class GraphCard extends StatefulWidget {
   final Chart chart;
-  final bool showMax;
-  final bool showCurrent;
 
   const GraphCard({
     super.key,
     required this.chart,
-    this.showMax = false,
-    this.showCurrent = false,
   });
 
   @override
@@ -242,71 +234,87 @@ class _GraphCardState extends State<GraphCard> {
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Column(
-            children: [
-              if (widget.showMax)
-                Text(
-                  'maximum: 0 m/s²',
-                  style: const TextStyle(fontFamily: 'robot-mono'),
-                ),
-              if (widget.showCurrent)
-                Text(
-                  'current: 0 m/s²',
-                  style: const TextStyle(fontFamily: 'robot-mono'),
-                ),
-              Expanded(child: widget.chart),
-            ],
-          ),
+          child: widget.chart,
         ),
       ),
     );
   }
 }
 
-class Chart extends StatefulWidget {
+class Chart extends ConsumerStatefulWidget {
   const Chart({
     super.key,
     required this.stream,
     this.strokeWidth = 1,
     this.lineColor,
-    this.onData,
+    this.showMax = false,
+    this.showCurrent = false,
   });
 
   final Stream<ChartPoint> stream;
   final double strokeWidth;
   final Color? lineColor;
-  final Function(ChartPoint)? onData;
+  final bool showMax;
+  final bool showCurrent;
 
   @override
-  State<Chart> createState() => _ChartState();
+  ConsumerState<Chart> createState() => _ChartState();
 }
 
-class _ChartState extends State<Chart> {
+class _ChartState extends ConsumerState<Chart> {
   final _line = LineChartData(limit: limit);
+  double _max = 0;
+  double _current = 0;
 
   @override
   void initState() {
     widget.stream.listen((data) {
-      widget.onData?.call(data);
+      if (ref.read(pausedProvider)) {
+        return;
+      }
       _line.addData(data.time, data.value);
-      setState(() {});
+      setState(() {
+        _max = _line.maxY;
+        _current = _line.currentY;
+      });
     });
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_line.isEmpty) {
-      return const SizedBox();
-    }
-    return LineChart(
-      lines: [
-        _line.asLine(
-          color: widget.lineColor ?? Theme.of(context).colorScheme.onSurface,
-          strokeWidth: widget.strokeWidth,
+    ref.listen(restartProvider, (prev, next) {
+      _line.reset();
+      setState(() {
+        _max = 0;
+        _current = 0;
+      });
+    });
+    return Column(
+      children: [
+        if (widget.showMax)
+          Text(
+            'maximum: ${_max.toStringAsFixed(2)} m/s²',
+            style: const TextStyle(fontFamily: 'robot-mono'),
+          ),
+        if (widget.showCurrent)
+          Text(
+            'current: ${_current.toStringAsFixed(2)} m/s²',
+            style: const TextStyle(fontFamily: 'robot-mono'),
+          ),
+        Expanded(
+          child: LineChart(
+            lines: [
+              _line.asLine(
+                color:
+                    widget.lineColor ?? Theme.of(context).colorScheme.onSurface,
+                strokeWidth: widget.strokeWidth,
+              ),
+            ],
+            labelCount: 5,
+          ),
         ),
       ],
-      labelCount: 5,
     );
   }
 }
